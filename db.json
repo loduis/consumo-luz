@@ -1,0 +1,97 @@
+[
+  {
+    "month": "2023-10",
+    "reading": 68541,
+    "payment": 108200
+  },
+  {
+    "month": "2023-11",
+    "reading": 69781,
+    "payment": 101500
+  },
+  {
+    "month": "2023-12",
+    "reading": 71104,
+    "payment": 108100
+  },
+  {
+    "month": "2024-01",
+    "reading": 72150,
+    "payment": 85400
+  },
+  {
+    "month": "2024-02",
+    "reading": 73368,
+    "payment": 108000
+  },
+  {
+    "month": "2024-03",
+    "reading": 74670,
+    "payment": 120100
+  },
+  {
+    "month": "2024-04",
+    "reading": 75917,
+    "payment": 104000
+  },
+  {
+    "month": "2024-05",
+    "reading": 77274,
+    "payment": 97400
+  },
+  {
+    "month": "2024-06",
+    "reading": 78361,
+    "payment": 90750
+  },
+  {
+    "month": "2024-07",
+    "reading": 79592,
+    "payment": 101700
+  },
+  {
+    "month": "2024-08",
+    "reading": 80867,
+    "payment": 101520
+  },
+  {
+    "month": "2024-09",
+    "reading": 82140,
+    "payment": 101200
+  },
+  {
+    "month": "2024-10",
+    "reading": 83420,
+    "payment": 101100
+  },
+  {
+    "month": "2024-11",
+    "reading": 84637,
+    "payment": 101500
+  },
+  {
+    "month": "2024-12",
+    "reading": 85812,
+    "payment": 97800
+  },
+  {
+    "month": "2025-01",
+    "reading": 87006,
+    "payment": 65200
+  },
+  {
+    "month": "2025-02",
+    "reading": 88137,
+    "payment": 91400
+  },
+  {
+    "month": "2025-03",
+    "reading": 89473,
+    "payment": 108300
+  },
+  {
+    "month": "2025-04",
+    "reading": 90501,
+    "payment": 100000
+  }
+]

@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Control de Consumo de Luz</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body class="font-sans bg-gray-100 p-6">
+
+  <h1 class="text-3xl font-bold mb-6 text-center text-gray-800">Control de Consumo de Luz</h1>
+
+  <div class="container mx-auto max-w-5xl mt-8 p-6 bg-white rounded-lg shadow">
+    <h2 class="text-xl font-bold mb-4 text-gray-800">Ingresar / Actualizar Datos</h2>
+    <form id="data-form" class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+      <div>
+        <label for="month" class="block text-sm font-medium text-gray-700 mb-1">Mes</label>
+        <input type="month" id="month" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2">
+      </div>
+
+      <div>
+        <label for="current-reading" class="block text-sm font-medium text-gray-700 mb-1">Lectura actual del medidor (kWh)</label>
+        <input type="number" id="current-reading" required min="0" step="0.01" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2">
+      </div>
+
+      <div>
+        <label for="payment" class="block text-sm font-medium text-gray-700 mb-1">Pago total de luz ($)</label>
+        <input type="number" id="payment" required min="0" step="0.01" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2">
+      </div>
+
+      <div class="md:col-span-3 flex justify-end">
+        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md shadow-sm">
+          Guardar / Actualizar
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <div class="container mx-auto max-w-5xl mt-8 p-6 bg-white rounded-lg shadow">
+      <h2 class="text-xl font-bold mb-4 text-gray-800">Estadísticas</h2>
+      <div id="statistics" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-gray-700">
+          <div><strong>Consumo Total:</strong> <span id="total-consumption">-</span> kWh</div>
+          <div><strong>Consumo Promedio Mensual:</strong> <span id="average-consumption">-</span> kWh</div>
+          <div><strong>Pago Total:</strong> $<span id="total-payment">-</span></div>
+          <div><strong>Pago Promedio Mensual:</strong> $<span id="average-payment">-</span></div>
+          <div><strong>Costo Promedio por kWh:</strong> $<span id="average-cost-kwh">-</span>/kWh</div>
+      </div>
+  </div>
+
+  <div class="container mx-auto max-w-5xl mt-8 p-6 bg-white rounded-lg shadow">
+      <h2 class="text-xl font-bold mb-4 text-gray-800">Gráfico: Costo por kWh ($/kWh)</h2>
+      <div id="cost-kwh-chart" class="w-full h-80 sm:h-96"></div>
+  </div>
+
+  <div class="container mx-auto max-w-5xl mt-8 p-6 bg-white rounded-lg shadow">
+      <h2 class="text-xl font-bold mb-4 text-gray-800">Gráfico: Consumo (kWh)</h2>
+      <div id="consumption-chart" class="w-full h-80 sm:h-96"></div>
+  </div>
+
+  <div class="container mx-auto max-w-5xl mt-8 p-6 bg-white rounded-lg shadow">
+      <h2 class="text-xl font-bold mb-4 text-gray-800">Gráfico: Pago ($)</h2>
+      <div id="payment-chart" class="w-full h-80 sm:h-96"></div>
+  </div>
+
+
+  <div class="container mx-auto max-w-5xl mt-8 p-6 bg-white rounded-lg shadow">
+      <h2 class="text-xl font-bold mb-4 text-gray-800">Gestión de Datos</h2>
+      <div class="flex space-x-4">
+          <button id="export-button" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md shadow-sm">
+              Exportar Datos
+          </button>
+          <label for="import-file" class="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-md shadow-sm cursor-pointer">
+              Importar Datos
+          </label>
+          <input type="file" id="import-file" accept=".json" class="hidden">
+          <button id="delete-db-button" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md shadow-sm">
+              Eliminar Base de Datos
+          </button>
+      </div>
+  </div>
+
+
+  <div class="container mx-auto max-w-5xl mt-8 bg-white rounded-lg shadow overflow-hidden">
+    <table id="data-table" class="min-w-full divide-y divide-gray-200">
+      <thead class="bg-gray-50">
+        <tr>
+          <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mes</th>
+          <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lectura</th>
+          <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Consumo (kWh)</th>
+          <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pago ($)</th>
+          <th scope="col" class="relative px-6 py-3"><span class="sr-only">Acciones</span></th>
+        </tr>
+      </thead>
+      <tbody class="bg-white divide-y divide-gray-200">
+        </tbody>
+    </table>
+  </div>
+
+  <script>
+    let db;
+    const DB_NAME = 'ElectricityDB';
+    const DB_VERSION = 4; // Increased version for store name change
+    const STORE_NAME = 'readings'; // Using English store name internally
+
+    function initDB() {
+      const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+      request.onupgradeneeded = function(event) {
+        db = event.target.result;
+        // Check and delete old store names if they exist
+        if (db.objectStoreNames.contains('lecturas')) {
+           db.deleteObjectStore('lecturas');
+        }
+         if (db.objectStoreNames.contains('readings')) {
+           db.deleteObjectStore('readings'); // Delete the old 'readings' store if upgrading from a version where it existed
+        }
+        // Create the new store with English field names
+        if (!db.objectStoreNames.contains(STORE_NAME)) {
+          db.createObjectStore(STORE_NAME, { keyPath: 'month' });
+        }
+      };
+
+      request.onsuccess = function(event) {
+        db = event.target.result;
+        renderTable();
+        renderCharts();
+        renderStatistics();
+      };
+
+      request.onerror = function(event) {
+        console.error('Error opening IndexedDB', event); // English log message
+      };
+    }
+
+    function saveData(month, reading, payment) { // English parameter names
+      // Check if db is ready
+      if (!db) {
+          alert('La base de datos no está lista. Por favor, inténtalo de nuevo en un momento.'); // Spanish alert
+          return;
+      }
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      // Using English field names for storing data
+      store.put({ month: month, reading: parseFloat(reading), payment: parseFloat(payment) });
+      tx.oncomplete = () => {
+        renderTable();
+        renderCharts();
+        renderStatistics();
+        // alert('Datos guardados/actualizados correctamente.'); // Spanish alert (if uncommented)
+      };
+      tx.onerror = (event) => {
+          console.error('Error saving data:', event.target.error); // English log message
+          alert('Error al guardar datos.'); // Spanish alert
+      };
+    }
+
+    function fetchAllData() {
+      return new Promise((resolve, reject) => {
+         // Check if db is ready
+        if (!db) {
+             reject('Database not ready'); // English rejection message
+             return;
+        }
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const store = tx.objectStore(STORE_NAME);
+        const request = store.getAll();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = (e) => reject(e);
+      });
+    }
+
+    // Function to render statistics (English logic with 0 decimals for display)
+    async function renderStatistics() {
+        const data = await fetchAllData().catch(error => {
+            console.error("Failed to fetch data for statistics:", error); // English log message
+            return []; // Return empty array to avoid further errors
+        });
+        // Sort data by month in ascending order for consumption calculation
+        const sorted = data.sort((a, b) => new Date(a.month + '-01') - new Date(b.month + '-01'));
+
+        let totalConsumption = 0;
+        let totalPayment = 0;
+        let numberOfMonths = 0;
+        let totalCostPerKwh = 0;
+        let numberOfMonthsWithConsumption = 0;
+
+
+        for (let i = 1; i < sorted.length; i++) {
+            // Calculate consumption using English field names
+            const consumption = sorted[i].reading - sorted[i - 1].reading;
+            if (consumption >= 0) {
+                totalConsumption += consumption;
+                 // Only include months with valid consumption in the average cost calculation
+                const costPerKwh = consumption > 0 ? sorted[i].payment / consumption : 0;
+                 if (consumption > 0) {
+                    totalCostPerKwh += costPerKwh;
+                    numberOfMonthsWithConsumption++;
+                 }
+            }
+            totalPayment += sorted[i].payment; // Use English field name
+            numberOfMonths++;
+        }
+
+        const averageConsumption = numberOfMonths > 0 ? totalConsumption / numberOfMonths : 0;
+        const averagePayment = numberOfMonths > 0 ? totalPayment / numberOfMonths : 0;
+        const averageCostPerKwh = numberOfMonthsWithConsumption > 0 ? totalCostPerKwh / numberOfMonthsWithConsumption : 0;
+
+
+        // Update Spanish text content and format with 0 decimals
+        document.getElementById('total-consumption').textContent = formatWithThousandsSeparator(totalConsumption.toFixed(0));
+        document.getElementById('average-consumption').textContent = formatWithThousandsSeparator(averageConsumption.toFixed(0));
+        document.getElementById('total-payment').textContent = formatWithThousandsSeparator(totalPayment.toFixed(0));
+        document.getElementById('average-payment').textContent = formatWithThousandsSeparator(averagePayment.toFixed(0));
+        document.getElementById('average-cost-kwh').textContent = formatWithThousandsSeparator(averageCostPerKwh.toFixed(2)); // Keep 2 decimals for cost per kWh as it's a rate
+    }
+
+
+    // Function to render charts (English logic)
+    async function renderCharts() {
+      const data = await fetchAllData().catch(error => {
+            console.error("Failed to fetch data for charts:", error); // English log message
+            return []; // Return empty array to avoid further errors
+        });
+      // Sort data by month in ascending order for chart plotting
+      const sorted = data.sort((a, b) => new Date(a.month + '-01') - new Date(b.month + '-01'));
+
+      const costPerKwhData = [];
+      const consumptionData = [];
+      const paymentData = [];
+
+      for (let i = 1; i < sorted.length; i++) {
+        // Calculate consumption using English field names
+        const consumption = sorted[i].reading - sorted[i - 1].reading;
+        const costPerKwh = consumption > 0 ? sorted[i].payment / consumption : 0;
+        const time = new Date(sorted[i].month + '-01').getTime() / 1000;
+
+        costPerKwhData.push({ time: time, value: parseFloat(costPerKwh.toFixed(2)) }); // Keep 2 decimals for chart data
+        consumptionData.push({ time: time, value: parseFloat(consumption.toFixed(0)) }); // 0 decimals for chart data
+        paymentData.push({ time: time, value: parseFloat(sorted[i].payment.toFixed(0)) }); // 0 decimals for chart data (Use English field name)
+      }
+
+      // Base configuration for charts (English titles for series)
+      const chartOptionsBase = {
+          width: 0, // Will be adjusted by ResizeObserver
+          height: 0, // Will be adjusted by ResizeObserver
+          layout: { background: { type: 'Solid', color: '#ffffff' }, textColor: '#333' },
+          grid: {
+            vertLines: { color: '#e5e7eb' },
+            horzLines: { color: '#e5e7eb' }
+          },
+          timeScale: {
+            timeVisible: true,
+            secondsVisible: false,
+            rightOffset: 3,
+            barSpacing: 5,
+            fixLeftEdge: false,
+            fixRightEdge: false,
+            tickMarkFormatter: (time, tickMarkType) => {
+              const d = new Date(time * 1000);
+              // Spanish month names for display on chart axis
+              const MONTHS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+              const year = d.getUTCFullYear();
+              const month = MONTHS[d.getUTCMonth()];
+
+              switch (tickMarkType) {
+                case 0: // Year
+                  return `${month} ${year}`;
+                case 1: // Month
+                case 2: // Day
+                  return `${month}`;
+                default:
+                  return '';
+              }
+            },
+            borderColor: '#d1d5db',
+            visible: true,
+            range: {
+              from: sorted.length > 0 ? new Date(sorted[0].month + '-01').getTime() / 1000 : undefined,
+              to: sorted.length > 0 ? new Date(sorted[sorted.length - 1].month + '-01').getTime() / 1000 : undefined,
+            }
+          },
+          rightPriceScale: { visible: true }, // Keep visible for charts
+           leftPriceScale: { visible: false },
+      };
+
+       // Render Cost per kWh chart (Spanish title)
+      const costKwhChartContainer = document.getElementById('cost-kwh-chart');
+      costKwhChartContainer.innerHTML = '';
+      const costKwhChart = LightweightCharts.createChart(costKwhChartContainer, {
+          ...chartOptionsBase,
+          width: costKwhChartContainer.clientWidth,
+          height: costKwhChartContainer.clientHeight,
+          rightPriceScale: {
+               visible: true, autoScale: true, borderColor: '#d1d5db', mode: LightweightCharts.PriceScaleMode.Normal, invertScale: false, alignLabels: true,
+               // Default price format for cost per kWh
+          },
+      });
+      const costKwhSeries = costKwhChart.addSeries(LightweightCharts.LineSeries,{
+          color: '#3b82f6',
+          lineWidth: 2,
+          title: 'Costo por kWh', // Spanish title
+           // Price format for Cost per kWh (2 decimals)
+          priceFormat: {
+              type: 'custom',
+              minMove: 0.01,
+              formatter: (price) => {
+                  return parseFloat(price).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+              },
+          },
+      });
+      costKwhSeries.setData(costPerKwhData);
+
+
+      // Render Consumption chart (Spanish title)
+      const consumptionChartContainer = document.getElementById('consumption-chart');
+      consumptionChartContainer.innerHTML = '';
+       const consumptionChart = LightweightCharts.createChart(consumptionChartContainer, {
+          ...chartOptionsBase,
+          width: consumptionChartContainer.clientWidth,
+          height: consumptionChartContainer.clientHeight,
+           rightPriceScale: {
+               visible: true, autoScale: true, borderColor: '#d1d5db', mode: LightweightCharts.PriceScaleMode.Normal, invertScale: false, alignLabels: true,
+                // Default price format for Consumption
+          },
+      });
+      const consumptionSeries = consumptionChart.addSeries(LightweightCharts.LineSeries, {
+          color: '#10b981',
+          lineWidth: 2,
+          title: 'Consumo (kWh)', // Spanish title
+           // Price format for Consumption (0 decimals)
+           priceFormat: {
+              type: 'custom',
+              minMove: 1, // Minimum price movement to consider a change
+              formatter: (price) => {
+                  return parseFloat(price).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+              },
+          },
+      });
+      consumptionSeries.setData(consumptionData);
+
+
+      // Render Payment chart (Spanish title)
+      const paymentChartContainer = document.getElementById('payment-chart');
+      paymentChartContainer.innerHTML = '';
+      const paymentChart = LightweightCharts.createChart(paymentChartContainer, {
+          ...chartOptionsBase,
+          width: paymentChartContainer.clientWidth,
+          height: paymentChartContainer.clientHeight,
+           rightPriceScale: {
+               visible: true, autoScale: true, borderColor: '#d1d5db', mode: LightweightCharts.PriceScaleMode.Normal, invertScale: false, alignLabels: true,
+                // Default price format for Payment
+          },
+      });
+      const paymentSeries = paymentChart.addSeries(LightweightCharts.LineSeries,{
+          color: '#f59e0b',
+          lineWidth: 2,
+          title: 'Pago ($)', // Spanish title
+           // Price format for Payment (0 decimals)
+           priceFormat: {
+              type: 'custom',
+               minMove: 1, // Minimum price movement to consider a change
+              formatter: (price) => {
+                  return parseFloat(price).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+              },
+          },
+      });
+      paymentSeries.setData(paymentData);
+
+      // Sync time scales and add ResizeObserver
+      const charts = [costKwhChart, consumptionChart, paymentChart];
+
+       if (sorted.length > 0) {
+            const timeRange = {
+                 from: new Date(sorted[0].month + '-01').getTime() / 1000,
+                 to: new Date(sorted[sorted.length - 1].month + '-01').getTime() / 1000,
+            };
+           charts.forEach(chart => {
+               chart.timeScale().setVisibleRange(timeRange);
+           });
+
+            const syncCrosshairs = (mainChart, syncedCharts) => {
+                mainChart.subscribeCrosshairMove(param => {
+                    syncedCharts.forEach(syncedChart => {
+                        if (syncedChart !== mainChart) {
+                             syncedChart.clearCrosshairPosition();
+                            if (param.time) {
+                                syncedChart.setCrosshairPosition(param.price, param.time, syncedChart.timeScale().coordinateToLogical(param.point.x));
+                            }
+                        }
+                    });
+                });
+            };
+
+           syncCrosshairs(costKwhChart, charts);
+           syncCrosshairs(consumptionChart, charts);
+           syncCrosshairs(paymentChart, charts);
+       }
+
+
+      // Adjust chart size on window resize
+      [costKwhChartContainer, consumptionChartContainer, paymentChartContainer].forEach(container => {
+          new ResizeObserver(entries => {
+              if (entries.length === 0 || entries[0].target.clientHeight === 0) {
+                  return;
+              }
+              const chart = charts.find(c => c.options().container === container);
+              if (chart) {
+                   chart.applyOptions({ width: entries[0].target.clientWidth, height: entries[0].target.clientHeight });
+              }
+          }).observe(container);
+      });
+    }
+
+    // --- Manual formatting function for thousands separator (with decimals controlled by input) ---
+    function formatWithThousandsSeparator(number) {
+        const parts = number.toString().split('.');
+        const integerPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+        // Include decimal part only if it exists
+        const decimalPart = parts[1] ? ',' + parts[1] : '';
+        return integerPart + decimalPart;
+    }
+
+
+    async function renderTable() {
+      const data = await fetchAllData().catch(error => {
+            console.error("Failed to fetch data for table:", error); // English log message
+            return []; // Return empty array to avoid further errors
+        });
+      const tbody = document.querySelector('#data-table tbody');
+      tbody.innerHTML = '';
+
+      // Sorting in descending order by month (English logic)
+      const sorted = data.sort((a, b) => new Date(b.month + '-01') - new Date(a.month + '-01'));
+
+      sorted.forEach((item, index) => {
+        const tr = document.createElement('tr');
+        // Add Tailwind class for hover effect
+        tr.classList.add('hover:bg-gray-100');
+        // *** ADD CLICK EVENT TO HIGHLIGHT ROW ***
+        tr.addEventListener('click', () => {
+            // Remove highlight from other rows if you only want one highlighted at a time
+            // document.querySelectorAll('#data-table tbody tr').forEach(row => {
+            //     row.classList.remove('bg-yellow-200');
+            // });
+            // Toggle the highlight class on the clicked row
+            tr.classList.toggle('bg-yellow-200');
+        });
+
+
+        let consumo = '-';
+        // Consumption calculation based on the order in the sorted array (English logic)
+        if (index < sorted.length - 1) { // Compare with the next item in the descending order
+            const currentReading = item.reading; // Using English field name
+            const previousReading = sorted[index + 1].reading; // Using English field name
+            let calculatedConsumption = currentReading - previousReading;
+
+            if (calculatedConsumption < 0) {
+                calculatedConsumption = 0;
+            }
+
+            // *** USE MANUAL FORMATTING FUNCTION WITH 0 DECIMALS ***
+            consumo = formatWithThousandsSeparator(calculatedConsumption.toFixed(0));
+        } else {
+             // For the last item (oldest month), there is no previous reading to calculate consumption
+            consumo = '-';
+        }
+
+
+        // Format Reading and Payment with thousands separator and 0 decimal places
+        const formattedReading = parseFloat(item.reading).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+        const formattedPayment = parseFloat(item.payment).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
+
+        tr.innerHTML = `
+          <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${item.month}</td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${formattedReading}</td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${consumo}</td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">$${formattedPayment}</td>
+          <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+            <button onclick="editEntry('${item.month}')" class="text-indigo-600 hover:text-indigo-900">Editar</button>
+            <button onclick="deleteEntry('${item.month}')" class="text-red-600 hover:text-red-900 ml-4">Eliminar</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function editEntry(month) {
+       // Check if db is ready
+      if (!db) {
+          alert('La base de datos no está lista. Por favor, inténtalo de nuevo en un momento.'); // Spanish alert
+          return;
+      }
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const request = store.get(month);
+      request.onsuccess = function(event) {
+        const data = event.target.result;
+        if (data) {
+          document.getElementById('month').value = data.month;
+          document.getElementById('current-reading').value = data.reading; // Using English field name
+          document.getElementById('payment').value = data.payment; // Using English field name
+        }
+      }
+       request.onerror = (event) => {
+         console.error('Error fetching data for editing:', event.target.error); // English log message
+         alert('Error al cargar datos para edición.'); // Spanish alert
+       };
+    }
+
+    function deleteEntry(month) {
+        // Check if db is ready
+        if (!db) {
+            alert('La base de datos no está lista. Por favor, inténtalo de nuevo en un momento.'); // Spanish alert
+            return;
+        }
+        // Spanish confirmation message
+        if (confirm(`¿Estás seguro de eliminar los datos de ${month}?`)) {
+            const tx = db.transaction(STORE_NAME, 'readwrite');
+            const store = tx.objectStore(STORE_NAME);
+            const request = store.delete(month);
+            request.onsuccess = () => {
+                renderTable();
+                renderCharts();
+                renderStatistics();
+                alert('Datos eliminados correctamente.'); // Spanish alert
+            };
+            request.onerror = (event) => {
+                console.error('Error deleting data:', event.target.error); // English log message
+                alert('Error al eliminar datos.'); // Spanish alert
+            };
+        }
+    }
+
+    async function exportData() {
+        // Check if db is ready
+        if (!db) {
+            alert('La base de datos no está lista. Por favor, inténtalo de nuevo en un momento.'); // Spanish alert
+            return;
+        }
+        const data = await fetchAllData().catch(error => {
+            console.error("Failed to fetch data for export:", error); // English log message
+            return []; // Return empty array to avoid further errors
+        });
+        // Ensure exported data uses English field names
+        const exportedData = data.map(item => ({
+            month: item.month,
+            reading: item.reading, // English field name
+            payment: item.payment // English field name
+        }));
+        const jsonString = JSON.stringify(exportedData, null, 2);
+
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'datos_consumo_luz.json'; // Spanish file name
+        document.body.appendChild(a);
+        a.click();
+
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        alert('Datos exportados correctamente.'); // Spanish alert
+    }
+
+    function importData(event) {
+        // Check if db is ready BEFORE proceeding with file reading
+        if (!db) {
+            alert('La base de datos no está lista. Por favor, inténtalo de nuevo en un momento.'); // Spanish alert
+            document.getElementById('import-file').value = ''; // Clear the file input
+            return;
+        }
+
+        const file = event.target.files[0];
+        if (!file) {
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const importedData = JSON.parse(e.target.result);
+                // Spanish alert message
+                if (!Array.isArray(importedData)) {
+                    alert('El formato del archivo no es válido. Debe ser un array JSON.');
+                    document.getElementById('import-file').value = '';
+                    return;
+                }
+
+                const tx = db.transaction(STORE_NAME, 'readwrite');
+                const store = tx.objectStore(STORE_NAME);
+                let importCount = 0;
+                let errorCount = 0;
+
+                importedData.forEach(item => {
+                    // Expecting English field names in imported data
+                    if (item.month && typeof item.reading !== 'undefined' && typeof item.payment !== 'undefined') {
+                         try {
+                              // Storing with English field names
+                              store.put({
+                                  month: item.month,
+                                  reading: parseFloat(item.reading),
+                                  payment: parseFloat(item.payment)
+                              });
+                              importCount++;
+                         } catch (e) {
+                              console.error('Error saving imported item:', item, e); // English log message
+                              errorCount++;
+                         }
+                    } else {
+                        console.warn('Skipping item with invalid format during import:', item); // English log message
+                        errorCount++;
+                    }
+                });
+
+                tx.oncomplete = () => {
+                    renderTable();
+                    renderCharts();
+                    renderStatistics();
+                    // Spanish alert message
+                    alert(`Importación completada. ${importCount} registros procesados, ${errorCount} errores/ítems inválidos.`);
+                    document.getElementById('import-file').value = '';
+                };
+                 tx.onerror = (event) => {
+                    console.error('Error during import transaction:', event.target.error); // English log message
+                    alert('Error durante la importación de datos.'); // Spanish alert
+                    document.getElementById('import-file').value = '';
+                };
+
+
+            } catch (e) {
+                alert('Error al procesar el archivo JSON.'); // Spanish alert
+                console.error('Error parsing JSON:', e); // English log message
+                 document.getElementById('import-file').value = '';
+            }
+        };
+
+        reader.readAsText(file);
+    }
+
+    // Function to delete the IndexedDB database
+    function deleteDatabase() {
+        // Spanish confirmation message
+        if (confirm(`¿Estás seguro de eliminar la base de datos "${DB_NAME}"? Esta acción es irreversible y eliminará todos los datos.`)) {
+            const deleteRequest = indexedDB.deleteDatabase(DB_NAME);
+
+            deleteRequest.onsuccess = function() {
+                console.log('Database deleted successfully'); // English log message
+                alert('Base de datos eliminada correctamente.'); // Spanish alert
+                 // Clear the UI after deletion
+                 const tbody = document.querySelector('#data-table tbody');
+                 tbody.innerHTML = '';
+                 document.getElementById('total-consumption').textContent = '-';
+                 document.getElementById('average-consumption').textContent = '-';
+                 document.getElementById('total-payment').textContent = '-';
+                 document.getElementById('average-payment').textContent = '-';
+                 document.getElementById('average-cost-kwh').textContent = '-';
+                 // You might also want to clear or reset the charts here if they exist
+                 // For example: costKwhChart.setData([]);
+                 // Note: Accessing chart objects directly might require storing them globally or re-initializing
+            };
+
+            deleteRequest.onerror = function() {
+                console.error('Error deleting database'); // English log message
+                alert('Error al eliminar la base de datos.'); // Spanish alert
+            };
+
+             deleteRequest.onblocked = function() {
+                console.warn('Database deletion blocked'); // English log message
+                alert('La eliminación de la base de datos está bloqueada. Por favor, cierra todas las pestañas de esta aplicación e inténtalo de nuevo.'); // Spanish alert
+            };
+        }
+    }
+
+
+    document.getElementById('data-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const month = document.getElementById('month').value;
+      const reading = document.getElementById('current-reading').value; // English variable name
+      const payment = document.getElementById('payment').value; // English variable name
+      saveData(month, reading, payment); // Calling with English parameter names
+      e.target.reset();
+    });
+
+    document.getElementById('export-button').addEventListener('click', exportData);
+    document.getElementById('import-file').addEventListener('change', importData);
+    // Add event listener for the new delete button
+    document.getElementById('delete-db-button').addEventListener('click', deleteDatabase);
+
+
+    window.addEventListener('DOMContentLoaded', initDB);
+
+  </script>
+
+</body>
+</html>
